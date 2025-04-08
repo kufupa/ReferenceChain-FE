@@ -1,17 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./App.css";
-import Flashcard, { Card } from "./components/Flashcard.tsx";
-import Scroll from "./components/Scroll.tsx";
-import ScrollButton from "./components/ScrollButton.tsx";
+import { Card } from "./components/Flashcard";
 
 function App() {
-  const [scrollAmounts, setScrollAmounts] = useState<number[]>([0]);
-  const [scrolls, setScrolls] = useState<Card[][]>([[]]);
-  const [currentScroll, setCurrentScroll] = useState(0);
-
+  const [allCards, setAllCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const colors = ["#FCE4EC", "#FFF9C4", "#D0EBFF", "#D8F3DC", "#FFD8B1"];
+  const [future, setFuture] = useState<string | undefined>(undefined);
+  const [futureShown, setFutureShown] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -31,142 +27,64 @@ function App() {
       })
       .then((data) => {
         const nodes = data.nodes;
-        setScrolls([
+        setAllCards(
           nodes.map((node) => ({
             title: node.title,
             content: node.content,
             link: node.url,
-          })),
-        ]);
-        setScrollAmounts([0]);
+          }))
+        );
+        setLoading(false);
       })
       .catch((error) => {
         console.error(error);
+        setLoading(false);
       });
   }, []);
 
-  const finalScrollAmount = useMemo(
-    () => scrollAmounts[currentScroll],
-    [scrollAmounts, currentScroll]
-  );
+  const fetchRelatedCards = async (url: string) => {
+    setLoading(true);
+    const encodedUrl = encodeURIComponent(url);
+    const endpoint = `http://localhost:5000/api/prevents?url=${encodedUrl}`;
 
-  const finalCards = useMemo(
-    () => scrolls[currentScroll] ?? [],
-    [scrolls, currentScroll]
-  );
-
-  const atTop = useMemo(() => finalScrollAmount === 0, [finalScrollAmount]);
-
-  const atBottom = useMemo(
-    () => finalScrollAmount === finalCards.length - 1,
-    [finalScrollAmount, finalCards]
-  );
-
-  const atStart = useMemo(() => currentScroll === 0, [currentScroll]);
-
-  const [cached, setCached] = useState(false);
-
-  const scrollUp = useCallback(() => {
-    setScrollAmounts((prev) => {
-      const next = [...prev];
-      next[currentScroll] = Math.max(next[currentScroll] - 1, 0);
-      next.splice(currentScroll + 1);
-      return next;
-    });
-    if (currentScroll < scrolls.length - 1) {
-      setScrolls((prev) => {
-        const next = [...prev];
-        next.splice(currentScroll + 1);
-        return next;
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
-      setCached(false);
-    }
-  }, [currentScroll, scrolls.length]);
 
-  const scrollDown = useCallback(() => {
-    setScrollAmounts((prev) => {
-      const next = [...prev];
-      next[currentScroll] = Math.min(
-        next[currentScroll] + 1,
-        finalCards.length - 1
-      );
-      next.splice(currentScroll + 1);
-      return next;
-    });
-    if (currentScroll < scrolls.length - 1) {
-      setScrolls((prev) => {
-        const next = [...prev];
-        next.splice(currentScroll + 1);
-        return next;
-      });
-      setCached(false);
-    }
-  }, [currentScroll, finalCards.length, scrolls.length]);
-
-  const scrollLeft = useCallback(() => {
-    setCurrentScroll((prev) => Math.max(prev - 1, 0));
-    setCached(true);
-  }, []);
-
-  const scrollRight = useCallback(
-    async (url: string) => {
-      if (cached) {
-        setCurrentScroll((prev) => prev + 1);
-        return;
+      if (!response.ok) {
+        throw new Error("Failed to fetch");
       }
 
-      const encodedUrl = encodeURIComponent(url);
-      const endpoint = `http://localhost:5000/api/prevents?url=${encodedUrl}`;
+      const data = await response.json();
+      const nodes = data.nodes;
 
-      try {
-        const response = await fetch(endpoint, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch");
-        }
-
-        const data = await response.json();
-        const nodes = data.nodes;
-
-        setFuture(undefined);
+      // Add new cards to the existing ones without duplicates
+      setAllCards((prevCards) => {
+        const newCards = nodes.map((node) => ({
+          title: node.title,
+          content: node.content,
+          link: node.url,
+        }));
+        
+        // Filter out duplicates based on link property
+        const existingLinks = new Set(prevCards.map(card => card.link));
+        const uniqueNewCards = newCards.filter(card => !existingLinks.has(card.link));
+        
         setHasOpened(true);
+        return [...prevCards, ...uniqueNewCards];
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        setScrolls((prev) => {
-          const next = [...prev];
-          next.push(
-            nodes.map((node) => ({
-              title: node.title,
-              content: node.content,
-              link: node.url,
-            }))
-          );
-          return next;
-        });
-
-        setScrollAmounts((prev) => {
-          const next = [...prev];
-          next.push(0);
-          return next;
-        });
-
-        setCurrentScroll((prev) => prev + 1);
-      } catch (error) {
-        console.error(error);
-      }
-    },
-    [cached]
-  );
-
-  const [future, setFuture] = useState<string | undefined>(undefined);
-  const [futureShown, setFutureShown] = useState(false);
-  const [hasOpened, setHasOpened] = useState(false);
-
-  const showFuture = useCallback(() => {
+  const showFuture = () => {
     setFutureShown(true);
     if (future !== undefined) {
       return;
@@ -186,95 +104,88 @@ function App() {
         return response.json();
       })
       .then((data) => {
-        console.log(data);
-
         setFuture(data.future);
       })
       .catch((error) => {
         console.error(error);
       });
-  }, [future]);
+  };
 
   return (
-    <div
-      className="relative h-full transition-colors duration-1000 ease-in-out"
-      style={{
-        backgroundColor: colors[currentScroll % colors.length],
-      }}
-    >
-      <div className="absolute left-0 top-0 w-full h-full flex flex-col items-center justify-center gap-8">
-        <div className="z-10 h-12">
-          {!atTop && (
-            <ScrollButton icon="keyboard_arrow_up" onClick={scrollUp} />
-          )}
-        </div>
-        <div className="h-card"></div>
-        <div className="z-10 h-12">
-          {!atBottom && (
-            <ScrollButton icon="keyboard_arrow_down" onClick={scrollDown} />
-          )}
-        </div>
-      </div>
-      <div className="absolute left-0 top-0 w-full h-full flex items-center justify-center pr-64">
-        <div className="z-10">
-          {!atStart && (
-            <ScrollButton icon="keyboard_arrow_left" onClick={scrollLeft} />
-          )}
-        </div>
-        <div className="w-card"></div>
-      </div>
-      <div className="flex justify-center absolute top-0 w-full h-full">
-        <div
-          className="transition-transform duration-300 w-card"
-          style={{
-            transform: `translateX(-${currentScroll * 60}rem)`,
-          }}
-        >
-          {scrolls.map((cards, i) => (
-            <div
-              className="absolute top-0 h-full"
-              style={{
-                left: `${i * 60}rem`,
-              }}
-              key={i}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-8">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-8 flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-800">NewsStitch</h1>
+          {hasOpened && (
+            <button
+              className="bg-emerald-600 cursor-pointer rounded-lg py-1.5 px-6 text-white font-semibold"
+              onClick={showFuture}
             >
-              <Scroll scrollAmount={scrollAmounts[i]}>
-                {cards.map((card, j) => (
-                  <Flashcard card={card} key={j} scrollRight={scrollRight} />
-                ))}
-              </Scroll>
-            </div>
-          ))}
-        </div>
+              Glimpse into the future
+            </button>
+          )}
+        </header>
+
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="loader"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {allCards.map((card, index) => (
+              <div key={index} className="bg-white rounded-xl shadow-lg overflow-hidden">
+                <div className="p-6">
+                  <h2 className="text-xl font-semibold mb-4">{card.title}</h2>
+                  <div className="relative overflow-hidden" style={{ maxHeight: "200px" }}>
+                    <div>
+                      {card.content.split("\n").map((paragraph, i) => (
+                        <p key={i} className="mb-2 text-gray-700">
+                          {paragraph}
+                        </p>
+                      ))}
+                    </div>
+                    <div className="absolute bottom-0 w-full h-16 bg-gradient-to-b from-transparent to-white"></div>
+                  </div>
+                </div>
+                <div className="flex justify-between p-4 bg-gray-50 border-t">
+                  <a
+                    href={card.link}
+                    className="cursor-pointer bg-slate-400 rounded-lg py-1.5 px-6 text-white font-semibold"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View Article
+                  </a>
+                  <button
+                    className="cursor-pointer bg-sky-500 rounded-lg py-1.5 px-6 text-white font-semibold flex items-center"
+                    onClick={() => fetchRelatedCards(card.link)}
+                  >
+                    Related News
+                    <span className="material-symbols-rounded ml-2">sync</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      {hasOpened && (
-        <button
-          className="absolute right-8 top-8 bg-emerald-600 cursor-pointer rounded-lg py-1.5 px-6 text-white font-semibold"
-          onClick={showFuture}
-        >
-          Glimpse into the future
-        </button>
-      )}
+
       {futureShown && (
-        <div className="absolute w-full h-full bg-black/15 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           {future ? (
-            <div className="bg-white p-4 pb-8 rounded-xl w-card h-card flex flex-col">
-              <div className="flex mb-5 items-center justify-between">
-                <h1 className="font-semibold text-lg ml-4">
-                  A Glimpse into the Future...
-                </h1>
+            <div className="bg-white p-6 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+              <div className="flex mb-4 items-center justify-between">
+                <h1 className="font-semibold text-lg">A Glimpse into the Future...</h1>
                 <button
-                  className="h-10 w-8"
+                  className="h-10 w-8 flex items-center justify-center"
                   onClick={() => setFutureShown(false)}
                 >
-                  <span className="text-2xl material-symbols-rounded">
-                    close
-                  </span>
+                  <span className="text-2xl material-symbols-rounded">close</span>
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                {future.split("\n").map((p) => (
-                  <p className="mb-2 px-4">{p}</p>
+                {future.split("\n").map((p, i) => (
+                  <p key={i} className="mb-3 text-gray-700">{p}</p>
                 ))}
               </div>
             </div>
