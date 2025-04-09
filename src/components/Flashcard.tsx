@@ -8,13 +8,13 @@ export type Card = {
 
 export default function Flashcard({
   card,
-  fetchRelated,
+  onMouseEnter,
 }: {
   card: Card;
-  fetchRelated: (url: string) => void;
+  onMouseEnter: () => void;
 }) {
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden" onMouseEnter={onMouseEnter}>
       <div className="p-6">
         <h2 className="text-xl font-semibold mb-4">{card.title}</h2>
         <div className="relative overflow-hidden" style={{ maxHeight: "200px" }}>
@@ -28,7 +28,7 @@ export default function Flashcard({
           <div className="absolute bottom-0 w-full h-16 bg-gradient-to-b from-transparent to-white"></div>
         </div>
       </div>
-      <div className="flex justify-between p-4 bg-gray-50 border-t">
+      <div className="flex justify-center p-4 bg-gray-50 border-t">
         <a
           href={card.link}
           className="cursor-pointer bg-slate-400 rounded-lg py-1.5 px-6 text-white font-semibold"
@@ -37,13 +37,6 @@ export default function Flashcard({
         >
           View Article
         </a>
-        <button
-          className="cursor-pointer bg-sky-500 rounded-lg py-1.5 px-6 text-white font-semibold flex items-center"
-          onClick={() => fetchRelated(card.link)}
-        >
-          Related News
-          <span className="material-symbols-rounded ml-2">sync</span>
-        </button>
       </div>
     </div>
   );

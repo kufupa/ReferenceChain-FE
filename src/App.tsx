@@ -8,6 +8,8 @@ function App() {
   const [future, setFuture] = useState<string | undefined>(undefined);
   const [futureShown, setFutureShown] = useState(false);
   const [hasOpened, setHasOpened] = useState(false);
+  const [activeCardUrl, setActiveCardUrl] = useState<string | null>(null);
+  const [fetchingRelated, setFetchingRelated] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -42,8 +44,13 @@ function App() {
       });
   }, []);
 
+  // Fetch related cards automatically when a card is selected/hovered
   const fetchRelatedCards = async (url: string) => {
-    setLoading(true);
+    if (fetchingRelated || url === activeCardUrl) return;
+    
+    setActiveCardUrl(url);
+    setFetchingRelated(true);
+    
     const encodedUrl = encodeURIComponent(url);
     const endpoint = `http://localhost:5000/api/prevents?url=${encodedUrl}`;
 
@@ -80,7 +87,7 @@ function App() {
     } catch (error) {
       console.error(error);
     } finally {
-      setLoading(false);
+      setFetchingRelated(false);
     }
   };
 
@@ -133,7 +140,11 @@ function App() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {allCards.map((card, index) => (
-              <div key={index} className="bg-white rounded-xl shadow-lg overflow-hidden">
+              <div 
+                key={index} 
+                className="bg-white rounded-xl shadow-lg overflow-hidden"
+                onMouseEnter={() => fetchRelatedCards(card.link)}
+              >
                 <div className="p-6">
                   <h2 className="text-xl font-semibold mb-4">{card.title}</h2>
                   <div className="relative overflow-hidden" style={{ maxHeight: "200px" }}>
@@ -147,7 +158,7 @@ function App() {
                     <div className="absolute bottom-0 w-full h-16 bg-gradient-to-b from-transparent to-white"></div>
                   </div>
                 </div>
-                <div className="flex justify-between p-4 bg-gray-50 border-t">
+                <div className="flex justify-center p-4 bg-gray-50 border-t">
                   <a
                     href={card.link}
                     className="cursor-pointer bg-slate-400 rounded-lg py-1.5 px-6 text-white font-semibold"
@@ -156,13 +167,6 @@ function App() {
                   >
                     View Article
                   </a>
-                  <button
-                    className="cursor-pointer bg-sky-500 rounded-lg py-1.5 px-6 text-white font-semibold flex items-center"
-                    onClick={() => fetchRelatedCards(card.link)}
-                  >
-                    Related News
-                    <span className="material-symbols-rounded ml-2">sync</span>
-                  </button>
                 </div>
               </div>
             ))}
